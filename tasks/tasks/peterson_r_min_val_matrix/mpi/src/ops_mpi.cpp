@@ -9,7 +9,7 @@
 
 namespace peterson_r_min_val_matrix {
 
-PetersonRMinValMatrixMPI::PetersonRMinValMatrixMPI(const InType& in) {
+PetersonRMinValMatrixMPI::PetersonRMinValMatrixMPI(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput().clear();
@@ -36,18 +36,18 @@ bool PetersonRMinValMatrixMPI::RunImpl() {
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   const int n = input;
-  
+
   // Распределение работы между процессами
-  const int chunk_size = (n + size - 1) / size;  // округление вверх
+  const int chunk_size = (n + size - 1) / size;
   const int start = rank * chunk_size;
   const int end = std::min(start + chunk_size, n);
-  
+
   std::vector<int> local_result;
   local_result.reserve(chunk_size);
-  
+
   // Каждый процесс вычисляет свою часть столбцов
   for (int j = start; j < end; ++j) {
-    int min_val = j + 1;  // первый элемент столбца
+    int min_val = j + 1;
     for (int i = 1; i < n; ++i) {
       const int val = i * n + j + 1;
       if (val < min_val) {
@@ -65,25 +65,24 @@ bool PetersonRMinValMatrixMPI::RunImpl() {
   // Собираем количество элементов от каждого процесса
   const int local_size = static_cast<int>(local_result.size());
   std::vector<int> recv_counts(size);
-  MPI_Gather(&local_size, 1, MPI_INT, 
-             recv_counts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Gather(&local_size, 1, MPI_INT, recv_counts.data(), 1, MPI_INT, 0,
+             MPI_COMM_WORLD);
 
   // Вычисляем смещения для Gatherv
   std::vector<int> displs(size, 0);
   if (rank == 0) {
     for (int i = 1; i < size; ++i) {
-      displs[i] = displs[i-1] + recv_counts[i-1];
+      displs[i] = displs[i - 1] + recv_counts[i - 1];
     }
   }
 
   // Собираем все результаты
-  MPI_Gatherv(local_result.data(), local_size, MPI_INT,
-              GetOutput().data(), recv_counts.data(), displs.data(), 
-              MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Gatherv(local_result.data(), local_size, MPI_INT, GetOutput().data(),
+              recv_counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
   // Рассылаем полный результат всем процессам
   MPI_Bcast(GetOutput().data(), n, MPI_INT, 0, MPI_COMM_WORLD);
-  
+
   return true;
 }
 
