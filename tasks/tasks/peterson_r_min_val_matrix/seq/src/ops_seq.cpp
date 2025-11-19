@@ -7,7 +7,7 @@
 
 namespace peterson_r_min_val_matrix {
 
-PetersonRMinValMatrixSEQ::PetersonRMinValMatrixSEQ(const InType &in) {
+PetersonRMinValMatrixSEQ::PetersonRMinValMatrixSEQ(const InType& in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput().clear();
