@@ -1,7 +1,6 @@
 #include "peterson_s_min_val_matrix/mpi/include/ops_mpi.hpp"
 
 #include <mpi.h>
-
 #include <algorithm>
 #include <vector>
 
@@ -27,52 +26,46 @@ bool PetersonSMinValMatrixMPI::PreProcessingImpl() {
 
 bool PetersonSMinValMatrixMPI::RunImpl() {
   InType n = GetInput();
-  if (n == 0) {
-    return false;
-  }
+  if (n == 0) return false;
 
-  int rank = 0;
-  int size = 0;
+  int rank, size;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
   int cols_per_proc = n / size;
   int remainder = n % size;
-  int start_col = rank * cols_per_proc + std::min(rank, remainder);
+  int start_col = rank * cols_per_proc + (rank < remainder ? rank : remainder);
   int num_local_cols = cols_per_proc + (rank < remainder ? 1 : 0);
 
-  std::vector<InType> local_mins;
-  local_mins.reserve(num_local_cols);
+  std::vector<InType> local_mins(num_local_cols);
 
-  for (int j = start_col; j < start_col + num_local_cols; ++j) {
-    InType min_val = j + 1;
+  for (int j = 0; j < num_local_cols; ++j) {
+    int col_idx = start_col + j;
+    InType min_val = col_idx + 1;
     for (int i = 1; i < n; ++i) {
-      InType current_val = i * n + j + 1;
-      min_val = std::min(min_val, current_val);
+      InType val = i * n + col_idx + 1;
+      if (val < min_val) min_val = val;
     }
-    local_mins.push_back(min_val);
+    local_mins[j] = min_val;
   }
 
-  std::vector<int> recvcounts(size);
-  std::vector<int> displs(size);
-
+  std::vector<int> recvcounts(size), displs(size);
   for (int i = 0; i < size; ++i) {
-    int proc_cols = cols_per_proc + (i < remainder ? 1 : 0);
-    recvcounts[i] = proc_cols;
-    displs[i] = i * cols_per_proc + std::min(i, remainder);
+    recvcounts[i] = cols_per_proc + (i < remainder ? 1 : 0);
+    displs[i] = i * cols_per_proc + (i < remainder ? i : remainder);
   }
 
   GetOutput().resize(n);
 
-  if (rank == 0) {
-    MPI_Gatherv(local_mins.data(), num_local_cols, MPI_INT, GetOutput().data(),
-                recvcounts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
-  } else {
-    MPI_Gatherv(local_mins.data(), num_local_cols, MPI_INT, nullptr,
-                recvcounts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
-  }
+  MPI_Gatherv(local_mins.data(), num_local_cols, MPI_INT,
+              rank == 0 ? GetOutput().data() : nullptr, recvcounts.data(),
+              displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
-  MPI_Bcast(GetOutput().data(), n, MPI_INT, 0, MPI_COMM_WORLD);
+  if (rank == 0) {
+    MPI_Bcast(GetOutput().data(), n, MPI_INT, 0, MPI_COMM_WORLD);
+  } else {
+    MPI_Bcast(GetOutput().data(), n, MPI_INT, 0, MPI_COMM_WORLD);
+  }
 
   return true;
 }
