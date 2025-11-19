@@ -14,7 +14,7 @@ PetersonRMinValMatrixSEQ::PetersonRMinValMatrixSEQ(const InType& in) {
 }
 
 bool PetersonRMinValMatrixSEQ::ValidationImpl() {
-  return GetOutput().empty();
+  return (GetInput() > 0) && (GetOutput().empty());
 }
 
 bool PetersonRMinValMatrixSEQ::PreProcessingImpl() {
@@ -23,17 +23,16 @@ bool PetersonRMinValMatrixSEQ::PreProcessingImpl() {
 }
 
 bool PetersonRMinValMatrixSEQ::RunImpl() {
-  int n = GetInput();
-  if (n == 0) {
-    GetOutput().clear();
-    return true;
+  auto input = GetInput();
+  if (input == 0) {
+    return false;
   }
 
-  std::vector<int> result(n);
-  for (int j = 0; j < n; ++j) {
+  std::vector<int> result(input);
+  for (int j = 0; j < input; ++j) {
     int min_val = j + 1;
-    for (int i = 1; i < n; ++i) {
-      int val = i * n + j + 1;
+    for (int i = 1; i < input; ++i) {
+      int val = i * input + j + 1;
       min_val = std::min(min_val, val);
     }
     result[j] = min_val;
