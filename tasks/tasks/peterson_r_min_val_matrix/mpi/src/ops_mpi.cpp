@@ -76,8 +76,7 @@ bool PetersonRMinValMatrixMPI::RunImpl() {
 
   std::vector<int> result(n);
   MPI_Gatherv(local.data(), static_cast<int>(local.size()), MPI_INT,
-              result.data(), counts.data(), displs.data(), MPI_INT, 0,
-              MPI_COMM_WORLD);
+      result.data(), counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
 
   MPI_Bcast(result.data(), n, MPI_INT, 0, MPI_COMM_WORLD);
   GetOutput() = result;
