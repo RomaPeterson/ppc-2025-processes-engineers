@@ -10,7 +10,8 @@
 
 namespace peterson_r_min_val_matrix {
 
-class PetersonRunFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
+class PetersonRunFuncTests
+    : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
  public:
   static std::string PrintTestParam(const TestType &test_param) {
     return std::to_string(std::get<0>(test_param)) + "_" + std::get<1>(test_param);
@@ -18,7 +19,8 @@ class PetersonRunFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType,
 
  protected:
   void SetUp() override {
-    input_data_ = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
+    input_data_ = std::get<static_cast<std::size_t>(
+        ppc::util::GTestParamIndex::kTestParams)>(GetParam());
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
@@ -26,9 +28,7 @@ class PetersonRunFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType,
     return output_data == expected;
   }
 
-  InType GetTestInputData() final {
-    return input_data_;
-  }
+  InType GetTestInputData() final { return input_data_; }
 
  private:
   std::vector<int> GenerateExpectedResult(int n) {
@@ -44,25 +44,24 @@ class PetersonRunFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType,
 
 namespace {
 
-TEST_P(PetersonRunFuncTests, MinValMatrixTest) {
-  ExecuteTest(GetParam());
-}
+TEST_P(PetersonRunFuncTests, MinValMatrixTest) { ExecuteTest(GetParam()); }
 
 const std::array<TestType, 3> kTestParam = {
-  std::make_tuple(3, "3"),
-  std::make_tuple(5, "5"), 
-  std::make_tuple(7, "7")
-};
+    std::make_tuple(3, "3"), std::make_tuple(5, "5"), std::make_tuple(7, "7")};
 
-const auto kTestTasksList =
-    std::tuple_cat(ppc::util::AddFuncTask<PetersonRMinValMatrixMPI, InType>(kTestParam, PPC_SETTINGS_peterson_r_min_val_matrix),
-                   ppc::util::AddFuncTask<PetersonRMinValMatrixSEQ, InType>(kTestParam, PPC_SETTINGS_peterson_r_min_val_matrix));
+const auto kTestTasksList = std::tuple_cat(
+    ppc::util::AddFuncTask<PetersonRMinValMatrixMPI, InType>(
+        kTestParam, PPC_SETTINGS_peterson_r_min_val_matrix),
+    ppc::util::AddFuncTask<PetersonRMinValMatrixSEQ, InType>(
+        kTestParam, PPC_SETTINGS_peterson_r_min_val_matrix));
 
 const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
 
-const auto kPerfTestName = PetersonRunFuncTests::PrintFuncTestName<PetersonRunFuncTests>;
+const auto kPerfTestName =
+    PetersonRunFuncTests::PrintFuncTestName<PetersonRunFuncTests>;
 
-INSTANTIATE_TEST_SUITE_P(MinValMatrixTests, PetersonRunFuncTests, kGtestValues, kPerfTestName);
+INSTANTIATE_TEST_SUITE_P(MinValMatrixTests, PetersonRunFuncTests, kGtestValues,
+                         kPerfTestName);
 
 }  // namespace
 
