@@ -29,19 +29,17 @@ bool PetersonSMinValMatrixSEQ::RunImpl() {
     return true;
   }
 
-  std::vector<int> mins(n);
+  std::vector<int> result(n);
   for (int j = 0; j < n; ++j) {
     int min_val = j + 1;
     for (int i = 1; i < n; ++i) {
-      int current_val = (i * n) + j + 1;
-      if (current_val < min_val) {
-        min_val = current_val;
-      }
+      int val = i * n + j + 1;
+      min_val = std::min(min_val, val);
     }
-    mins[j] = min_val;
+    result[j] = min_val;
   }
 
-  GetOutput() = mins;
+  GetOutput() = result;
   return true;
 }
 
