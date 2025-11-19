@@ -1,8 +1,6 @@
 #include "peterson_s_min_val_matrix/seq/include/ops_seq.hpp"
-
 #include <algorithm>
 #include <vector>
-
 #include "peterson_s_min_val_matrix/common/include/common.hpp"
 
 namespace peterson_s_min_val_matrix {
@@ -27,16 +25,15 @@ bool PetersonSMinValMatrixSEQ::RunImpl() {
   InType n = GetInput();
   if (n == 0) return false;
 
-  GetOutput().clear();
-  GetOutput().reserve(n);
+  GetOutput().resize(n);
 
   for (InType j = 0; j < n; ++j) {
     InType min_val = j + 1;
     for (InType i = 1; i < n; ++i) {
-      InType current_val = i * n + j + 1;
-      min_val = std::min(min_val, current_val);
+      InType val = i * n + j + 1;
+      if (val < min_val) min_val = val;
     }
-    GetOutput().push_back(min_val);
+    GetOutput()[j] = min_val;
   }
 
   return true;
