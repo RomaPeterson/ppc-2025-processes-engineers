@@ -18,6 +18,7 @@ PetersonSMinValMatrixMPI::PetersonSMinValMatrixMPI(const InType &in) {
 bool PetersonSMinValMatrixMPI::ValidationImpl() {
   int rank = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
   if (rank == 0) {
     return GetOutput().empty();
   }
@@ -26,7 +27,10 @@ bool PetersonSMinValMatrixMPI::ValidationImpl() {
 
 bool PetersonSMinValMatrixMPI::PreProcessingImpl() {
   int rank = 0;
+  int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &size);
+
   if (rank == 0) {
     GetOutput().clear();
   }
@@ -43,6 +47,7 @@ bool PetersonSMinValMatrixMPI::RunImpl() {
   if (rank == 0) {
     n = GetInput();
   }
+
   MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   if (n == 0) {
@@ -52,35 +57,40 @@ bool PetersonSMinValMatrixMPI::RunImpl() {
     return true;
   }
 
-  int chunk = n / size;
-  int rem = n % size;
-  int start = rank * chunk + std::min(rank, rem);
-  int end = start + chunk + (rank < rem ? 1 : 0);
+  int chunk_size = n / size;
+  int remainder = n % size;
 
-  std::vector<int> local;
-  for (int j = start; j < end; ++j) {
+  int start_col = (rank * chunk_size) + std::min(rank, remainder);
+  int end_col = start_col + chunk_size + (rank < remainder ? 1 : 0);
+
+  std::vector<int> local_mins;
+  for (int j = start_col; j < end_col; ++j) {
     int min_val = j + 1;
     for (int i = 1; i < n; ++i) {
-      int val = i * n + j + 1;
-      min_val = std::min(min_val, val);
+      int current_val = (i * n) + j + 1;
+      if (current_val < min_val) {
+        min_val = current_val;
+      }
     }
-    local.push_back(min_val);
+    local_mins.push_back(min_val);
   }
 
-  std::vector<int> counts(size);
+  std::vector<int> recvcounts(size);
   std::vector<int> displs(size);
   for (int i = 0; i < size; ++i) {
-    counts[i] = chunk + (i < rem ? 1 : 0);
-    displs[i] = i * chunk + std::min(i, rem);
+    int proc_cols = chunk_size + (i < remainder ? 1 : 0);
+    recvcounts[i] = proc_cols;
+    displs[i] = (i * chunk_size) + std::min(i, remainder);
   }
 
-  std::vector<int> result(n);
-  MPI_Gatherv(local.data(), static_cast<int>(local.size()), MPI_INT,
-              result.data(), counts.data(), displs.data(), MPI_INT, 0,
+  std::vector<int> global_mins(n);
+  MPI_Gatherv(local_mins.data(), static_cast<int>(local_mins.size()), MPI_INT,
+              global_mins.data(), recvcounts.data(), displs.data(), MPI_INT, 0,
               MPI_COMM_WORLD);
 
-  MPI_Bcast(result.data(), n, MPI_INT, 0, MPI_COMM_WORLD);
-  GetOutput() = result;
+  MPI_Bcast(global_mins.data(), n, MPI_INT, 0, MPI_COMM_WORLD);
+
+  GetOutput() = global_mins;
   return true;
 }
 
