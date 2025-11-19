@@ -35,40 +35,60 @@ bool PetersonRMinValMatrixMPI::RunImpl() {
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  int n = input;
-  int chunk = n / size;
-  int rem = n % size;
-  int start = rank * chunk + std::min(rank, rem);
-  int end = start + chunk + (rank < rem ? 1 : 0);
-
-  std::vector<int> local;
+  const int n = input;
+  
+  // Распределение работы между процессами
+  const int chunk_size = (n + size - 1) / size;  // округление вверх
+  const int start = rank * chunk_size;
+  const int end = std::min(start + chunk_size, n);
+  
+  std::vector<int> local_result;
+  local_result.reserve(chunk_size);
+  
+  // Каждый процесс вычисляет свою часть столбцов
   for (int j = start; j < end; ++j) {
-    int min_val = j + 1;
+    int min_val = j + 1;  // первый элемент столбца
     for (int i = 1; i < n; ++i) {
-      int val = i * n + j + 1;
-      min_val = std::min(min_val, val);
+      const int val = i * n + j + 1;
+      if (val < min_val) {
+        min_val = val;
+      }
     }
-    local.push_back(min_val);
+    local_result.push_back(min_val);
   }
 
-  std::vector<int> counts(size);
-  std::vector<int> displs(size);
-  for (int i = 0; i < size; ++i) {
-    counts[i] = chunk + (i < rem ? 1 : 0);
-    displs[i] = i * chunk + std::min(i, rem);
+  // Сбор результатов на процессе 0
+  if (rank == 0) {
+    GetOutput().resize(n);
   }
 
-  std::vector<int> result(n);
-  MPI_Gatherv(local.data(), static_cast<int>(local.size()), MPI_INT,
-      result.data(), counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+  // Собираем количество элементов от каждого процесса
+  const int local_size = static_cast<int>(local_result.size());
+  std::vector<int> recv_counts(size);
+  MPI_Gather(&local_size, 1, MPI_INT, 
+             recv_counts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-  MPI_Bcast(result.data(), n, MPI_INT, 0, MPI_COMM_WORLD);
-  GetOutput() = result;
+  // Вычисляем смещения для Gatherv
+  std::vector<int> displs(size, 0);
+  if (rank == 0) {
+    for (int i = 1; i < size; ++i) {
+      displs[i] = displs[i-1] + recv_counts[i-1];
+    }
+  }
+
+  // Собираем все результаты
+  MPI_Gatherv(local_result.data(), local_size, MPI_INT,
+              GetOutput().data(), recv_counts.data(), displs.data(), 
+              MPI_INT, 0, MPI_COMM_WORLD);
+
+  // Рассылаем полный результат всем процессам
+  MPI_Bcast(GetOutput().data(), n, MPI_INT, 0, MPI_COMM_WORLD);
+  
   return true;
 }
 
 bool PetersonRMinValMatrixMPI::PostProcessingImpl() {
-  return true;
+  return !GetOutput().empty();
 }
 
 }  // namespace peterson_r_min_val_matrix
