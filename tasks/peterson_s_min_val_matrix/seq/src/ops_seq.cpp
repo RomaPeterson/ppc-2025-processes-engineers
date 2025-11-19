@@ -35,7 +35,7 @@ bool PetersonSMinValMatrixSEQ::RunImpl() {
 
   for (InType j = 0; j < n; j++) {
     InType min_val = j + 1;
-    
+
     for (InType i = 1; i < n; i++) {
       InType current_val = (i * n) + j + 1;
       min_val = std::min(min_val, current_val);
@@ -47,7 +47,8 @@ bool PetersonSMinValMatrixSEQ::RunImpl() {
 }
 
 bool PetersonSMinValMatrixSEQ::PostProcessingImpl() {
-  return !GetOutput().empty() && (GetOutput().size() == static_cast<size_t>(GetInput()));
+  return !GetOutput().empty() &&
+         (GetOutput().size() == static_cast<size_t>(GetInput()));
 }
 
 }  // namespace peterson_s_min_val_matrix
