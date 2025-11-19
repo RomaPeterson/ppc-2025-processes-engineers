@@ -49,7 +49,7 @@ bool PetersonSMinValMatrixMPI::RunImpl() {
 
   for (InType j = start_col; j < end_col; j++) {
     InType min_val = j + 1;
-    
+
     for (InType i = 1; i < n; i++) {
       InType current_val = (i * n) + j + 1;
       min_val = std::min(min_val, current_val);
@@ -69,11 +69,11 @@ bool PetersonSMinValMatrixMPI::RunImpl() {
   GetOutput().resize(n);
 
   if (rank == 0) {
-    MPI_Gatherv(local_mins.data(), num_local_cols, MPI_INT, GetOutput().data(), recvcounts.data(), displs.data(),
-                MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(local_mins.data(), num_local_cols, MPI_INT, GetOutput().data(),
+                recvcounts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
   } else {
-    MPI_Gatherv(local_mins.data(), num_local_cols, MPI_INT, nullptr, recvcounts.data(), displs.data(), MPI_INT, 0,
-                MPI_COMM_WORLD);
+    MPI_Gatherv(local_mins.data(), num_local_cols, MPI_INT, nullptr,
+                recvcounts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
   }
 
   MPI_Bcast(GetOutput().data(), n, MPI_INT, 0, MPI_COMM_WORLD);
@@ -82,7 +82,8 @@ bool PetersonSMinValMatrixMPI::RunImpl() {
 }
 
 bool PetersonSMinValMatrixMPI::PostProcessingImpl() {
-  return !GetOutput().empty() && (GetOutput().size() == static_cast<size_t>(GetInput()));
+  return !GetOutput().empty() &&
+         (GetOutput().size() == static_cast<size_t>(GetInput()));
 }
 
 }  // namespace peterson_s_min_val_matrix
