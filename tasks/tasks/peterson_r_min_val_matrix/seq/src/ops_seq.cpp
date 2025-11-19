@@ -23,17 +23,22 @@ bool PetersonRMinValMatrixSEQ::PreProcessingImpl() {
 }
 
 bool PetersonRMinValMatrixSEQ::RunImpl() {
-  auto input = GetInput();
+  const auto input = GetInput();
   if (input == 0) {
     return false;
   }
 
-  std::vector<int> result(input);
-  for (int j = 0; j < input; ++j) {
-    int min_val = j + 1;
-    for (int i = 1; i < input; ++i) {
-      int val = i * input + j + 1;
-      min_val = std::min(min_val, val);
+  const int n = input;
+  std::vector<int> result(n);
+  
+  // Вычисляем минимумы по столбцам матрицы
+  for (int j = 0; j < n; ++j) {
+    int min_val = j + 1;  // первый элемент столбца (i=0)
+    for (int i = 1; i < n; ++i) {
+      const int val = i * n + j + 1;
+      if (val < min_val) {
+        min_val = val;
+      }
     }
     result[j] = min_val;
   }
@@ -43,7 +48,7 @@ bool PetersonRMinValMatrixSEQ::RunImpl() {
 }
 
 bool PetersonRMinValMatrixSEQ::PostProcessingImpl() {
-  return true;
+  return !GetOutput().empty();
 }
 
 }  // namespace peterson_r_min_val_matrix
