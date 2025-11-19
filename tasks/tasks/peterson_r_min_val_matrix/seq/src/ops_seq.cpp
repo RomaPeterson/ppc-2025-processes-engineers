@@ -7,7 +7,7 @@
 
 namespace peterson_r_min_val_matrix {
 
-PetersonRMinValMatrixSEQ::PetersonRMinValMatrixSEQ(const InType& in) {
+PetersonRMinValMatrixSEQ::PetersonRMinValMatrixSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput().clear();
@@ -30,10 +30,10 @@ bool PetersonRMinValMatrixSEQ::RunImpl() {
 
   const int n = input;
   std::vector<int> result(n);
-  
+
   // Вычисляем минимумы по столбцам матрицы
   for (int j = 0; j < n; ++j) {
-    int min_val = j + 1;  // первый элемент столбца (i=0)
+    int min_val = j + 1;
     for (int i = 1; i < n; ++i) {
       const int val = i * n + j + 1;
       if (val < min_val) {
