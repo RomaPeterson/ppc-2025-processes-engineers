@@ -16,42 +16,26 @@ PetersonRMinValMatrixMPI::PetersonRMinValMatrixMPI(const InType& in) {
 }
 
 bool PetersonRMinValMatrixMPI::ValidationImpl() {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  if (rank == 0) {
-    return GetOutput().empty();
-  }
-  return true;
+  return (GetInput() > 0) && (GetOutput().empty());
 }
 
 bool PetersonRMinValMatrixMPI::PreProcessingImpl() {
-  int rank = 0;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  if (rank == 0) {
-    GetOutput().clear();
-  }
+  GetOutput().clear();
   return true;
 }
 
 bool PetersonRMinValMatrixMPI::RunImpl() {
+  auto input = GetInput();
+  if (input == 0) {
+    return false;
+  }
+
   int rank = 0;
   int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-  int n = 0;
-  if (rank == 0) {
-    n = GetInput();
-  }
-  MPI_Bcast(&n, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-  if (n == 0) {
-    if (rank == 0) {
-      GetOutput().clear();
-    }
-    return true;
-  }
-
+  int n = input;
   int chunk = n / size;
   int rem = n % size;
   int start = rank * chunk + std::min(rank, rem);
