@@ -27,9 +27,12 @@ bool PetersonSMinValMatrixMPI::PreProcessingImpl() {
 
 bool PetersonSMinValMatrixMPI::RunImpl() {
   InType n = GetInput();
-  if (n == 0) return false;
+  if (n == 0) {
+    return false;
+  }
 
-  int rank = 0, size = 0;
+  int rank = 0;
+  int size = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -50,7 +53,9 @@ bool PetersonSMinValMatrixMPI::RunImpl() {
     local_mins.push_back(min_val);
   }
 
-  std::vector<int> recvcounts(size), displs(size);
+  std::vector<int> recvcounts(size);
+  std::vector<int> displs(size);
+
   for (int i = 0; i < size; ++i) {
     int proc_cols = cols_per_proc + (i < remainder ? 1 : 0);
     recvcounts[i] = proc_cols;
