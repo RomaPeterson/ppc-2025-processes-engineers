@@ -32,7 +32,14 @@ class PetersonRunFuncTests : public ppc::util::BaseRunFuncTests<InType, OutType,
   std::vector<int> GenerateExpectedResult(int n) {
     std::vector<int> result(n);
     for (int j = 0; j < n; ++j) {
-      result[j] = j + 1;
+      int min_val = j + 1;
+      for (int i = 1; i < n; ++i) {
+        const int val = i * n + j + 1;
+        if (val < min_val) {
+          min_val = val;
+        }
+      }
+      result[j] = min_val;
     }
     return result;
   }
