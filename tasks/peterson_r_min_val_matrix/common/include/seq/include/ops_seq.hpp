@@ -10,7 +10,7 @@ class PetersonRMinValMatrixSEQ : public BaseTask {
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
     return ppc::task::TypeOfTask::kSEQ;
   }
-  explicit PetersonRMinValMatrixSEQ(const InType &in);
+  explicit PetersonRMinValMatrixSEQ(const InType& in);
 
  private:
   bool ValidationImpl() override;
