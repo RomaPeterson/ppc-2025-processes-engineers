@@ -1,12 +1,16 @@
 #include <gtest/gtest.h>
+#include <stb/stb_image.h>
 
 #include <tuple>
 #include <vector>
+#include <stdexcept>
+#include <string>
 
 #include "peterson_r_min_val_matrix/common/include/common.hpp"
 #include "peterson_r_min_val_matrix/mpi/include/ops_mpi.hpp"
 #include "peterson_r_min_val_matrix/seq/include/ops_seq.hpp"
 #include "util/include/func_test_util.hpp"
+#include "util/include/util.hpp"
 
 namespace peterson_r_min_val_matrix {
 
@@ -19,8 +23,25 @@ class PetersonRunFuncTests
 
  protected:
   void SetUp() override {
-    input_data_ = std::get<static_cast<std::size_t>(
+    int width = -1;
+    int height = -1;
+    int channels = -1;
+    
+    // Read image (теперь картинка есть в data/)
+    {
+      std::string abs_path = ppc::util::GetAbsoluteTaskPath(PPC_ID_peterson_r_min_val_matrix, "pic.jpg");
+      auto *data = stbi_load(abs_path.c_str(), &width, &height, &channels, 0);
+      if (data == nullptr) {
+        throw std::runtime_error("Failed to load image: " + std::string(stbi_failure_reason()));
+      }
+      stbi_image_free(data);
+    }
+
+    TestType params = std::get<static_cast<std::size_t>(
         ppc::util::GTestParamIndex::kTestParams)>(GetParam());
+    
+    // Generate input based on image properties
+    input_data_ = std::min(width, 10) + std::min(height, 10);
   }
 
   bool CheckTestOutputData(OutType &output_data) final {
