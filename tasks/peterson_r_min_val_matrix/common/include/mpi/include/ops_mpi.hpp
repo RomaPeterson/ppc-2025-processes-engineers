@@ -10,7 +10,7 @@ class PetersonRMinValMatrixMPI : public BaseTask {
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
     return ppc::task::TypeOfTask::kMPI;
   }
-  explicit PetersonRMinValMatrixMPI(const InType &in);
+  explicit PetersonRMinValMatrixMPI(const InType& in);
 
  private:
   bool ValidationImpl() override;
