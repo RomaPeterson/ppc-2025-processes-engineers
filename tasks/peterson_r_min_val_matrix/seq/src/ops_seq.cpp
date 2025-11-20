@@ -14,7 +14,9 @@ PetersonRMinValMatrixSEQ::PetersonRMinValMatrixSEQ(const InType& in) {
 }
 
 bool PetersonRMinValMatrixSEQ::ValidationImpl() {
-  return (GetInput() > 0) && (GetOutput().empty());
+  return (GetInput() >= kMinMatrixSize) && 
+         (GetInput() <= kMaxMatrixSize) && 
+         (GetOutput().empty());
 }
 
 bool PetersonRMinValMatrixSEQ::PreProcessingImpl() {
@@ -24,7 +26,7 @@ bool PetersonRMinValMatrixSEQ::PreProcessingImpl() {
 
 bool PetersonRMinValMatrixSEQ::RunImpl() {
   const auto input = GetInput();
-  if (input == 0) {
+  if (input <= 0) {
     return false;
   }
 
