@@ -9,7 +9,7 @@
 
 namespace peterson_r_min_val_matrix {
 
-PetersonRMinValMatrixMPI::PetersonRMinValMatrixMPI(const InType &in) {
+PetersonRMinValMatrixMPI::PetersonRMinValMatrixMPI(const InType& in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput().clear();
@@ -61,8 +61,7 @@ bool PetersonRMinValMatrixMPI::RunImpl() {
 
   const int local_size = static_cast<int>(local_result.size());
   std::vector<int> recv_counts(size);
-  MPI_Gather(&local_size, 1, MPI_INT, recv_counts.data(), 1, MPI_INT, 0,
-             MPI_COMM_WORLD);
+  MPI_Gather(&local_size, 1, MPI_INT, recv_counts.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
   std::vector<int> displs(size, 0);
   if (rank == 0) {
@@ -71,8 +70,8 @@ bool PetersonRMinValMatrixMPI::RunImpl() {
     }
   }
 
-  MPI_Gatherv(local_result.data(), local_size, MPI_INT, GetOutput().data(),
-              recv_counts.data(), displs.data(), MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Gatherv(local_result.data(), local_size, MPI_INT, GetOutput().data(), recv_counts.data(), displs.data(),
+              MPI_INT, 0, MPI_COMM_WORLD);
 
   MPI_Bcast(GetOutput().data(), n, MPI_INT, 0, MPI_COMM_WORLD);
 
