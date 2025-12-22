@@ -2,12 +2,13 @@
 
 #include <mpi.h>
 
+#include <algorithm>
 #include <cmath>
-#include <cstddef>  // добавлено для size_t
-#include <utility>  // добавлено для std::cmp_equal
+#include <cstddef>
+#include <utility>
 #include <vector>
 
-#include "peterson_r_gauss_band_horizontal_scheme/common/include/common.hpp"  // добавлено для InType
+#include "peterson_r_gauss_band_horizontal_scheme/common/include/common.hpp"
 
 namespace peterson_r_gauss_band_horizontal_scheme {
 
@@ -78,6 +79,7 @@ bool PetersonRGaussBandHorizontalSchemeMPI::RunImpl() {
     cols = augmented_matrix[0].size();
   }
 
+  // Рассылаем размеры матрицы всем процессам
   int n_int = static_cast<int>(n);
   int cols_int = static_cast<int>(cols);
   MPI_Bcast(&n_int, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -88,8 +90,9 @@ bool PetersonRGaussBandHorizontalSchemeMPI::RunImpl() {
 
   InType local_matrix;
   std::vector<int> map_global_to_local(n, -1);
+  std::vector<size_t> local_to_global;  // обратное отображение
 
-  SplitRows(augmented_matrix, n, cols, rank, size, local_matrix, map_global_to_local);
+  SplitRows(augmented_matrix, n, cols, rank, size, local_matrix, map_global_to_local, local_to_global);
 
   if (!ForwardEliminationMPI(local_matrix, map_global_to_local, n, cols, rank, size)) {
     return false;
@@ -100,7 +103,9 @@ bool PetersonRGaussBandHorizontalSchemeMPI::RunImpl() {
 }
 
 void PetersonRGaussBandHorizontalSchemeMPI::SplitRows(const InType &matrix, size_t n, size_t cols, int rank, int size,
-                                                      InType &local_matrix, std::vector<int> &map_global_to_local) {
+                                                      InType &local_matrix, std::vector<int> &map_global_to_local,
+                                                      std::vector<size_t> &local_to_global) {
+  // Вычисляем, сколько строк будет у текущего процесса
   int local_count = 0;
   for (size_t i = 0; i < n; ++i) {
     if (static_cast<int>(i) % size == rank) {
@@ -109,22 +114,36 @@ void PetersonRGaussBandHorizontalSchemeMPI::SplitRows(const InType &matrix, size
   }
 
   local_matrix.assign(local_count, std::vector<double>(cols));
-  int local_index = 0;
+  local_to_global.clear();
+  local_to_global.reserve(local_count);
 
-  for (size_t i = 0; i < n; ++i) {
-    if (static_cast<int>(i) % size == rank) {
-      map_global_to_local[i] = local_index;
-      if (rank == 0) {
-        local_matrix[local_index] = matrix[i];
+  // Процесс 0 распределяет строки
+  if (rank == 0) {
+    for (size_t i = 0; i < n; ++i) {
+      int dest_rank = static_cast<int>(i) % size;
+      if (dest_rank == 0) {
+        // Строка остается у процесса 0
+        int local_idx = map_global_to_local[i];
+        local_matrix[local_idx] = matrix[i];
+        local_to_global.push_back(i);
       } else {
-        MPI_Recv(local_matrix[local_index].data(), static_cast<int>(cols), MPI_DOUBLE, 0, static_cast<int>(i),
-                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        // Отправляем строку другому процессу
+        MPI_Send(matrix[i].data(), static_cast<int>(cols), MPI_DOUBLE, dest_rank, static_cast<int>(i), MPI_COMM_WORLD);
       }
-      ++local_index;
-    } else if (rank == 0) {
-      MPI_Send(matrix[i].data(), static_cast<int>(cols), MPI_DOUBLE, static_cast<int>(i) % size, static_cast<int>(i),
-               MPI_COMM_WORLD);
     }
+  } else {
+    // Принимаем свои строки от процесса 0
+    for (size_t i = rank; i < n; i += size) {
+      int local_idx = map_global_to_local[i];
+      MPI_Recv(local_matrix[local_idx].data(), static_cast<int>(cols), MPI_DOUBLE, 0, static_cast<int>(i),
+               MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+      local_to_global.push_back(i);
+    }
+  }
+
+  // Заполняем map_global_to_local
+  for (size_t i = 0; i < local_to_global.size(); ++i) {
+    map_global_to_local[local_to_global[i]] = static_cast<int>(i);
   }
 }
 
@@ -132,48 +151,46 @@ bool PetersonRGaussBandHorizontalSchemeMPI::ForwardEliminationMPI(InType &local_
                                                                   const std::vector<int> &map_global_to_local, size_t n,
                                                                   size_t cols, int rank, int size) {
   for (size_t k = 0; k < n; ++k) {
-    const int owner = static_cast<int>(k) % size;
-
+    int owner = static_cast<int>(k) % size;
     std::vector<double> pivot_row(cols);
+
+    // Владелец строки k подготавливает ее для рассылки
     if (rank == owner) {
-      pivot_row = local_matrix[map_global_to_local[k]];
+      int local_idx = map_global_to_local[k];
+      if (local_idx >= 0) {
+        pivot_row = local_matrix[static_cast<size_t>(local_idx)];
+      }
     }
 
+    // Рассылаем pivot_row всем процессам
     MPI_Bcast(pivot_row.data(), static_cast<int>(cols), MPI_DOUBLE, owner, MPI_COMM_WORLD);
 
+    // Проверяем, что ведущий элемент не слишком мал
     if (std::abs(pivot_row[k]) < 1e-10) {
       return false;
     }
 
-    EliminateMPI(local_matrix, map_global_to_local, k, n, cols, pivot_row);
+    // Выполняем исключение для локальных строк
+    for (size_t i = 0; i < local_matrix.size(); ++i) {
+      size_t global_i = local_to_global[i];  // используем предвычисленное отображение
+      if (global_i > k && std::abs(local_matrix[i][k]) > 1e-10) {
+        double factor = local_matrix[i][k] / pivot_row[k];
+        for (size_t j = k; j < cols; ++j) {
+          local_matrix[i][j] -= factor * pivot_row[j];
+        }
+      }
+    }
   }
   return true;
 }
 
-void PetersonRGaussBandHorizontalSchemeMPI::EliminateMPI(InType &local_matrix,
-                                                         const std::vector<int> &map_global_to_local, size_t pivot,
-                                                         size_t n, size_t cols, const std::vector<double> &pivot_row) {
-  for (size_t i = 0; i < local_matrix.size(); ++i) {
-    const size_t global_index = ResolveGlobalIndex(map_global_to_local, i, n);
-    if (global_index > pivot && std::abs(local_matrix[i][pivot]) > 1e-10) {
-      const double factor = local_matrix[i][pivot] / pivot_row[pivot];
-      for (size_t j = pivot; j < cols; ++j) {
-        local_matrix[i][j] -= factor * pivot_row[j];
-      }
-    }
-  }
-}
-
 size_t PetersonRGaussBandHorizontalSchemeMPI::ResolveGlobalIndex(const std::vector<int> &map_global_to_local,
                                                                  size_t local_index, size_t n) {
-  for (size_t i = 0; i < n; ++i) {
-    const int mapped_value = map_global_to_local[i];
-    // Используем std::cmp_equal для безопасного сравнения знакового и беззнакового целого
-    if (mapped_value >= 0 && std::cmp_equal(static_cast<size_t>(mapped_value), local_index)) {
-      return i;
-    }
+  // Более эффективная реализация через предвычисленный вектор
+  if (local_index < local_to_global.size()) {
+    return local_to_global[local_index];
   }
-  return 0;
+  return n;  // возвращаем n в случае ошибки
 }
 
 std::vector<double> PetersonRGaussBandHorizontalSchemeMPI::BackSubstitutionMPI(
@@ -183,17 +200,20 @@ std::vector<double> PetersonRGaussBandHorizontalSchemeMPI::BackSubstitutionMPI(
 
   for (int i = static_cast<int>(n) - 1; i >= 0; --i) {
     double sum = 0.0;
-    const int owner = i % size;
+    int owner = i % size;
 
     if (rank == owner) {
-      const int local_index = map_global_to_local[static_cast<size_t>(i)];
-      for (size_t j = static_cast<size_t>(i) + 1; j < n; ++j) {
-        sum += local_matrix[static_cast<size_t>(local_index)][j] * result[j];
+      int local_idx = map_global_to_local[static_cast<size_t>(i)];
+      if (local_idx >= 0) {
+        for (size_t j = static_cast<size_t>(i) + 1; j < n; ++j) {
+          sum += local_matrix[static_cast<size_t>(local_idx)][j] * result[j];
+        }
+        result[static_cast<size_t>(i)] = (local_matrix[static_cast<size_t>(local_idx)][cols - 1] - sum) /
+                                         local_matrix[static_cast<size_t>(local_idx)][static_cast<size_t>(i)];
       }
-      result[static_cast<size_t>(i)] = (local_matrix[static_cast<size_t>(local_index)][cols - 1] - sum) /
-                                       local_matrix[static_cast<size_t>(local_index)][static_cast<size_t>(i)];
     }
 
+    // Рассылаем вычисленное значение всем процессам
     MPI_Bcast(&result[static_cast<size_t>(i)], 1, MPI_DOUBLE, owner, MPI_COMM_WORLD);
   }
 
