@@ -1,0 +1,131 @@
+#include <gtest/gtest.h>
+
+#include <array>
+#include <cmath>
+#include <cstddef>
+#include <string>
+#include <tuple>
+
+#include "peterson_r_gauss_band_horizontal_scheme/common/include/common.hpp"
+#include "peterson_r_gauss_band_horizontal_scheme/mpi/include/ops_mpi.hpp"
+#include "peterson_r_gauss_band_horizontal_scheme/seq/include/ops_seq.hpp"
+#include "util/include/func_test_util.hpp"
+#include "util/include/util.hpp"
+
+namespace peterson_r_gauss_band_horizontal_scheme {
+
+class PetersonRGaussBandHorizontalSchemeRunFuncTestsProcesses
+    : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
+ public:
+  static std::string PrintTestParam(const TestType &test_param) {
+    return std::to_string(std::get<0>(test_param)) + "x" + std::to_string(std::get<1>(test_param));
+  }
+
+ protected:
+  void SetUp() override {
+    const TestType params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
+    const int matrix_size = std::get<0>(params);
+    const int band_width = std::get<1>(params);
+
+    InitExpectedOutput(matrix_size);
+    InitAugmentedMatrix(matrix_size, band_width);
+  }
+
+ private:
+  void InitExpectedOutput(int matrix_size) {
+    expected_output_.resize(static_cast<size_t>(matrix_size));
+    for (int i = 0; i < matrix_size; ++i) {
+      expected_output_[static_cast<size_t>(i)] = static_cast<double>(i + 1);
+    }
+  }
+
+  void InitAugmentedMatrix(int matrix_size, int band_width) {
+    input_data_.resize(static_cast<size_t>(matrix_size));
+
+    for (int i = 0; i < matrix_size; ++i) {
+      input_data_[static_cast<size_t>(i)].assign(static_cast<size_t>(matrix_size) + 1, 0.0);
+      InitMatrixRow(i, matrix_size, band_width);
+    }
+
+    for (int i = 0; i < matrix_size; ++i) {
+      ComputeRightHandSide(i, matrix_size);
+    }
+  }
+
+  void InitMatrixRow(int i, int matrix_size, int band_width) {
+    double sum = 0.0;
+    for (int j = 0; j < matrix_size; ++j) {
+      if (std::abs(i - j) <= band_width) {
+        const double value = (i == j) ? static_cast<double>(matrix_size + 1) : 1.0 / (std::abs(i - j) + 1.0);
+        input_data_[static_cast<size_t>(i)][static_cast<size_t>(j)] = value;
+        if (i != j) {
+          sum += std::abs(value);
+        }
+      }
+    }
+
+    if (input_data_[static_cast<size_t>(i)][static_cast<size_t>(i)] < sum) {
+      input_data_[static_cast<size_t>(i)][static_cast<size_t>(i)] = sum + 1.0;
+    }
+  }
+
+  void ComputeRightHandSide(int i, int matrix_size) {
+    double b = 0.0;
+    for (int j = 0; j < matrix_size; ++j) {
+      b += input_data_[static_cast<size_t>(i)][static_cast<size_t>(j)] * expected_output_[static_cast<size_t>(j)];
+    }
+    input_data_[static_cast<size_t>(i)][static_cast<size_t>(matrix_size)] = b;
+  }
+
+  bool CheckTestOutputData(OutType &output_data) final {
+    if (output_data.size() != expected_output_.size()) {
+      return false;
+    }
+
+    constexpr double kEps = 1e-5;
+    for (size_t i = 0; i < expected_output_.size(); ++i) {
+      if (std::abs(output_data[i] - expected_output_[i]) > kEps) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  InType GetTestInputData() final {
+    return input_data_;
+  }
+
+  InType input_data_;
+  OutType expected_output_;
+};
+
+}  // namespace peterson_r_gauss_band_horizontal_scheme
+
+namespace {
+
+using peterson_r_gauss_band_horizontal_scheme::InType;
+using peterson_r_gauss_band_horizontal_scheme::PetersonRGaussBandHorizontalSchemeRunFuncTestsProcesses;
+using peterson_r_gauss_band_horizontal_scheme::TestType;
+
+TEST_P(PetersonRGaussBandHorizontalSchemeRunFuncTestsProcesses, SolveLinearSystem) {
+  ExecuteTest(GetParam());
+}
+
+constexpr std::array<TestType, 6> kTestParam = {std::make_tuple(3, 1), std::make_tuple(4, 1), std::make_tuple(5, 2),
+                                                std::make_tuple(6, 2), std::make_tuple(8, 3), std::make_tuple(10, 3)};
+
+const auto kTestTasksList = std::tuple_cat(
+    ppc::util::AddFuncTask<peterson_r_gauss_band_horizontal_scheme::PetersonRGaussBandHorizontalSchemeMPI, InType>(
+        kTestParam, PPC_SETTINGS_peterson_r_gauss_band_horizontal_scheme),
+    ppc::util::AddFuncTask<peterson_r_gauss_band_horizontal_scheme::PetersonRGaussBandHorizontalSchemeSEQ, InType>(
+        kTestParam, PPC_SETTINGS_peterson_r_gauss_band_horizontal_scheme));
+
+const auto kGtestValues = ppc::util::ExpandToValues(kTestTasksList);
+
+const auto kTestName = PetersonRGaussBandHorizontalSchemeRunFuncTestsProcesses::PrintFuncTestName<
+    PetersonRGaussBandHorizontalSchemeRunFuncTestsProcesses>;
+
+INSTANTIATE_TEST_SUITE_P(GaussEliminationTests, PetersonRGaussBandHorizontalSchemeRunFuncTestsProcesses, kGtestValues,
+                         kTestName);
+
+}  // namespace
