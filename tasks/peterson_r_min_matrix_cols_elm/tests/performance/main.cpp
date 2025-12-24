@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
-#include <random>
-#include <tuple>
+#include <cstdint>
+#include <iostream>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -13,73 +13,80 @@
 #include "peterson_r_min_matrix_cols_elm/seq/include/ops_seq.hpp"
 #include "util/include/perf_test_util.hpp"
 
-namespace peterson_r_min_matrix_cols_elm {
+namespace peterson_r_matrix_min_by_columns {
 
 namespace {
 
-class PetersonRMinMatrixColsElmPerfTest
-    : public ppc::util::BaseRunPerfTests<InType, OutType> {
-  std::vector<int> correct_test_output_data_;
-  InType input_data_;
+inline InType Generate(int64_t i, int64_t j) {
+  uint64_t seed = (i * 100000007ULL + j * 1000000009ULL) ^ 42ULL;
 
-  void SetUp() override { Generate(10000, 10000, 123); }
+  seed ^= seed >> 12;
+  seed ^= seed << 25;
+  seed ^= seed >> 27;
+  uint64_t value = seed * 0x2545F4914F6CDD1DULL;
+
+  auto result = static_cast<InType>((value % 2000001ULL) - 1000000);
+  return result;
+}
+
+inline std::vector<InType> CalculateExpectedColumnMins(InType n) {
+  std::vector<InType> expected_mins(static_cast<size_t>(n), std::numeric_limits<InType>::max());
+
+  for (InType i = 0; i < n; i++) {
+    for (InType j = 0; j < n; j++) {
+      InType value = Generate(static_cast<int64_t>(i), static_cast<int64_t>(j));
+      expected_mins[static_cast<size_t>(j)] = std::min(value, expected_mins[static_cast<size_t>(j)]);
+    }
+  }
+
+  return expected_mins;
+}
+
+}  // anonymous namespace
+
+class PetersonRMinMatrixPerfomanceTests : public ppc::util::BaseRunPerfTests<InType, OutType> {
+  const InType kTestSize_ = 10000;
+  InType input_data_{};
+  std::vector<InType> expected_mins_;
+
+  void SetUp() override {
+    input_data_ = kTestSize_;
+    expected_mins_ = CalculateExpectedColumnMins(input_data_);
+  }
 
   bool CheckTestOutputData(OutType &output_data) final {
-    for (std::size_t i = 0; i < correct_test_output_data_.size(); i++) {
-      if (output_data[i] != correct_test_output_data_[i]) {
+    if (output_data.size() != static_cast<size_t>(input_data_)) {
+      std::cout << "Size mismatch: expected " << input_data_ << ", got " << output_data.size() << '\n';
+      return false;
+    }
+
+    for (std::size_t j = 0; std::cmp_less(j, output_data.size()); j++) {
+      if (output_data[j] != expected_mins_[j]) {
+        std::cout << "Value mismatch at column " << j << ": expected " << expected_mins_[j] << ", got "
+                  << output_data[j] << '\n';
         return false;
       }
     }
+
     return true;
   }
 
-  InType GetTestInputData() final { return input_data_; }
-
-  void Generate(std::size_t m, std::size_t n, int seed) {
-    std::mt19937 gen(seed);
-    std::uniform_int_distribution<> idis(-10, 20);
-
-    std::vector<int> val(m * n);
-    std::vector<int> answer(n);
-    for (std::size_t i = 0; i < n; i++) {
-      val[i] = idis(gen);
-      answer[i] = val[i];
-    }
-
-    for (std::size_t i = 1; i < m; i++) {
-      for (std::size_t j = 0; j < n; j++) {
-        const std::size_t idx = (i * n) + j;
-        val[idx] = idis(gen);
-        answer[j] = std::min(answer[j], val[idx]);
-      }
-    }
-    input_data_ = std::make_tuple(m, n, val);
-    correct_test_output_data_ = std::move(answer);
+  InType GetTestInputData() final {
+    return input_data_;
   }
 };
 
-const auto kAllPerfTasks =
-    ppc::util::MakeAllPerfTasks<InType, PetersonRMinMatrixColsElmMPI,
-                                PetersonRMinMatrixColsElmSEQ>(
-        PPC_SETTINGS_peterson_r_min_matrix_cols_elm);
-
-template <typename Tuple, std::size_t... Is>
-auto TupleToArray(const Tuple &tuple, std::index_sequence<Is...> /*unused*/) {
-  return std::array<ppc::util::PerfTestParam<InType, OutType>, sizeof...(Is)>{
-      std::get<Is>(tuple)...};
+TEST_P(PetersonRMinMatrixPerfomanceTests, RunPerfModes) {
+  ExecuteTest(GetParam());
 }
 
-constexpr std::size_t kPerfTasksCount =
-    std::tuple_size_v<decltype(kAllPerfTasks)>;
-const auto kPerfTasksArray =
-    TupleToArray(kAllPerfTasks, std::make_index_sequence<kPerfTasksCount>{});
+const auto kAllPerfTasks = ppc::util::MakeAllPerfTasks<InType, PetersonRMinMatrixMPI, PetersonRMinMatrixSEQ>(
+    PPC_SETTINGS_peterson_r_min_matrix_cols_elm);
 
-TEST_F(PetersonRMinMatrixColsElmPerfTest, RunPerfModes) {
-  for (const auto &param : kPerfTasksArray) {
-    ExecuteTest(param);
-  }
-}
+const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 
-} // namespace
+const auto kPerfTestName = PetersonRMinMatrixPerfomanceTests::CustomPerfTestName;
 
-} // namespace peterson_r_min_matrix_cols_elm
+INSTANTIATE_TEST_SUITE_P(RunModeTests, PetersonRMinMatrixPerfomanceTests, kGtestValues, kPerfTestName);
+
+}  // namespace peterson_r_matrix_min_by_columns

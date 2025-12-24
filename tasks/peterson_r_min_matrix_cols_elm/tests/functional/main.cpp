@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
-#include <fstream>
-#include <random>
-#include <stdexcept>
+#include <cstdint>
+#include <limits>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
@@ -17,131 +17,207 @@
 #include "util/include/func_test_util.hpp"
 #include "util/include/util.hpp"
 
-namespace peterson_r_min_matrix_cols_elm {
-
-class PetersonRMinMatrixColsElmTests
-    : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
-public:
-  static std::string PrintTestParam(const TestType &test_param) {
-    return std::get<0>(test_param);
-  }
-
-protected:
-  bool CheckTestOutputData(OutType &output_data) final {
-
-    for (std::size_t i = 0; i < correct_test_output_data_.size(); i++) {
-      if (output_data[i] != correct_test_output_data_[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  InType GetTestInputData() final { return input_data_; }
-
-  void Prepare(const TestType &params) {
-    if (!std::get<1>(params).empty()) {
-      GetDataFromFile(params);
-    } else {
-      Generate(params);
-    }
-  }
-
-private:
-  InType input_data_;
-  std::vector<int> correct_test_output_data_;
-
-  void Generate(const TestType &params) {
-    std::size_t m = std::get<2>(params)[0];
-    std::size_t n = std::get<2>(params)[1];
-    int seed = std::get<2>(params)[2];
-
-    std::mt19937 gen(seed);
-    std::uniform_int_distribution<> idis(-10, 20);
-
-    std::vector<int> val(m * n);
-    std::vector<int> answer(n);
-    for (std::size_t i = 0; i < n; i++) {
-      val[i] = idis(gen);
-      answer[i] = val[i];
-    }
-
-    for (std::size_t i = 1; i < m; i++) {
-      for (std::size_t j = 0; j < n; j++) {
-        const std::size_t idx = (i * n) + j;
-        val[idx] = idis(gen);
-        answer[j] = std::min(answer[j], val[idx]);
-      }
-    }
-    input_data_ = std::make_tuple(m, n, val);
-    correct_test_output_data_ = answer;
-  }
-
-  void GetDataFromFile(const TestType &params) {
-    std::size_t m = 0;
-    std::size_t n = 0;
-    std::string local = std::get<1>(params) + ".txt";
-    std::string abs_path = ppc::util::GetAbsoluteTaskPath(
-        PPC_ID_peterson_r_min_matrix_cols_elm, local);
-    std::ifstream file(abs_path);
-    if (!file.is_open()) {
-      throw std::runtime_error("Failed to open file: " + abs_path);
-    }
-    file >> m;
-    file >> n;
-    std::vector<int> val(m * n);
-    for (auto &value : val) {
-      file >> value;
-    }
-    input_data_ = std::make_tuple(m, n, val);
-    correct_test_output_data_ = std::get<2>(params);
-  }
-};
-
-TEST(PetersonRMinMatrixColsElmSEQ, ValidationFailsOnInvalidShape) {
-  InType bad_shape = std::make_tuple(0, 5, std::vector<int>({1, 2, 3}));
-  PetersonRMinMatrixColsElmSEQ task(bad_shape);
-
-  EXPECT_FALSE(task.Validation());
-}
+namespace peterson_r_matrix_min_by_columns {
 
 namespace {
 
-const std::array<TestType, 6> kTestParam = {
-    std::make_tuple("Matrix_3_3_from_1_to_9", "test_matrix_3_3",
-                    std::vector<int>({1, 2, 3})),
-    std::make_tuple("Matrix_4_5_with_negatives", "test_matrix_4_5_neg",
-                    std::vector<int>({-3, -5, -4, -2, -7})),
-    std::make_tuple("Generate_7_7", "", std::vector<int>({7, 7, 123})),
-    std::make_tuple("Generate_7_8", "", std::vector<int>({7, 8, 123})),
-    std::make_tuple("Generate_single_row", "", std::vector<int>({1, 5, 42})),
-    std::make_tuple("Generate_single_column", "",
-                    std::vector<int>({9, 1, 321}))};
+inline InType Generate(int64_t i, int64_t j) {
+  uint64_t seed = (i * 100000007ULL + j * 1000000009ULL) ^ 42ULL;
 
-const auto kTestTasksList = std::tuple_cat(
-    ppc::util::AddFuncTask<PetersonRMinMatrixColsElmMPI, InType>(
-        kTestParam, PPC_SETTINGS_peterson_r_min_matrix_cols_elm),
-    ppc::util::AddFuncTask<PetersonRMinMatrixColsElmSEQ, InType>(
-        kTestParam, PPC_SETTINGS_peterson_r_min_matrix_cols_elm));
+  seed ^= seed >> 12;
+  seed ^= seed << 25;
+  seed ^= seed >> 27;
+  uint64_t value = seed * 0x2545F4914F6CDD1DULL;
 
-template <typename Tuple, std::size_t... Is>
-auto TupleToArray(const Tuple &tuple, std::index_sequence<Is...> /*unused*/) {
-  return std::array<ppc::util::FuncTestParam<InType, OutType, TestType>,
-                    sizeof...(Is)>{std::get<Is>(tuple)...};
+  auto result = static_cast<InType>((value % 2000001ULL) - 1000000);
+  return result;
 }
 
-constexpr std::size_t kTasksCount = std::tuple_size_v<decltype(kTestTasksList)>;
-const auto kTestTasksArray =
-    TupleToArray(kTestTasksList, std::make_index_sequence<kTasksCount>{});
+inline std::vector<InType> CalculateExpectedColumnMins(InType n) {
+  std::vector<InType> expected_mins(static_cast<size_t>(n), std::numeric_limits<InType>::max());
 
-TEST_F(PetersonRMinMatrixColsElmTests, MatmulFromPic) {
-  for (const auto &param : kTestTasksArray) {
-    Prepare(std::get<static_cast<std::size_t>(
-                ppc::util::GTestParamIndex::kTestParams)>(param));
-    ExecuteTest(param);
+  for (InType i = 0; i < n; i++) {
+    for (InType j = 0; j < n; j++) {
+      InType value = Generate(static_cast<int64_t>(i), static_cast<int64_t>(j));
+      expected_mins[static_cast<size_t>(j)] = std::min(value, expected_mins[static_cast<size_t>(j)]);
+    }
+  }
+
+  return expected_mins;
+}
+
+}  // anonymous namespace
+
+class PetersonRMinMatrixTestProcesses : public ppc::util::BaseRunFuncTests<InType, OutType, TestType> {
+ public:
+  static std::string PrintTestParam(const TestType &test_param) {
+    return std::to_string(std::get<0>(test_param)) + "_" + std::get<1>(test_param);
+  }
+
+ protected:
+  void SetUp() override {
+    TestType params = std::get<static_cast<std::size_t>(ppc::util::GTestParamIndex::kTestParams)>(GetParam());
+    input_data_ = std::get<0>(params);
+    expected_mins_ = CalculateExpectedColumnMins(input_data_);
+  }
+
+  bool CheckTestOutputData(OutType &output_data) final {
+    if (output_data.size() != static_cast<size_t>(input_data_)) {
+      return false;
+    }
+
+    for (std::size_t j = 0; j < output_data.size(); j++) {
+      if (output_data[j] != expected_mins_[j]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  InType GetTestInputData() final {
+    return input_data_;
+  }
+
+ private:
+  InType input_data_ = 0;
+  std::vector<InType> expected_mins_;
+};
+
+namespace {
+
+TEST_P(PetersonRMinMatrixTestProcesses, ComputesColumnMinimumsForDiverseSizes) {
+  ExecuteTest(GetParam());
+}
+
+const std::array<TestType, 11> kFunctionalParams = {
+    std::make_tuple(1, "tuple_unit"),  std::make_tuple(2, "tuple_even"),   std::make_tuple(3, "tuple_odd"),
+    std::make_tuple(5, "tuple_5"),     std::make_tuple(17, "tuple_prime"), std::make_tuple(64, "tuple_64"),
+    std::make_tuple(99, "tuple_99"),   std::make_tuple(100, "tuple_100"),  std::make_tuple(128, "tuple_128"),
+    std::make_tuple(256, "tuple_256"), std::make_tuple(512, "tuple_512")};
+
+const auto kTaskMatrix = std::tuple_cat(ppc::util::AddFuncTask<PetersonRMinMatrixMPI, InType>(
+                                            kFunctionalParams, PPC_SETTINGS_peterson_r_min_matrix_cols_elm),
+                                        ppc::util::AddFuncTask<PetersonRMinMatrixSEQ, InType>(
+                                            kFunctionalParams, PPC_SETTINGS_peterson_r_min_matrix_cols_elm));
+
+const auto kParameterizedValues = ppc::util::ExpandToValues(kTaskMatrix);
+
+const auto kFunctionalTestName = PetersonRMinMatrixTestProcesses::PrintFuncTestName<PetersonRMinMatrixTestProcesses>;
+
+INSTANTIATE_TEST_SUITE_P(MinimumColumnSearchSuite, PetersonRMinMatrixTestProcesses, kParameterizedValues,
+                         kFunctionalTestName);
+
+template <typename TaskType>
+void ExpectFullPipelineSuccess(InType n) {
+  auto task = std::make_shared<TaskType>(n);
+
+  ASSERT_TRUE(task->Validation());
+  ASSERT_TRUE(task->PreProcessing());
+  ASSERT_TRUE(task->Run());
+  ASSERT_TRUE(task->PostProcessing());
+
+  std::vector<InType> expected_mins = CalculateExpectedColumnMins(n);
+  OutType output = task->GetOutput();
+
+  ASSERT_EQ(output.size(), static_cast<std::size_t>(n));
+
+  for (std::size_t j = 0; std::cmp_less(j, static_cast<std::size_t>(n)); j++) {
+    ASSERT_EQ(output[j], expected_mins[j]) << "Column " << j << ": mismatch";
   }
 }
 
-} // namespace
+TEST(PetersonRMinMatrixStandalone, SeqPipelineHandlesEdgeSizes) {
+  const std::array<InType, 6> k_sizes = {1, 4, 15, 33, 127, 255};
+  for (InType size : k_sizes) {
+    ExpectFullPipelineSuccess<PetersonRMinMatrixSEQ>(size);
+  }
+}
 
-} // namespace peterson_r_min_matrix_cols_elm
+TEST(PetersonRMinMatrixStandalone, MpiPipelineHandlesEdgeSizes) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  const std::array<InType, 6> k_sizes = {1, 5, 18, 37, 130, 257};
+  for (InType size : k_sizes) {
+    ExpectFullPipelineSuccess<PetersonRMinMatrixMPI>(size);
+  }
+}
+
+TEST(PetersonRMinMatrixValidation, RejectsZeroInputSeq) {
+  PetersonRMinMatrixSEQ task(0);
+  EXPECT_FALSE(task.Validation());
+  task.PreProcessing();
+  task.Run();
+  task.PostProcessing();
+}
+
+TEST(PetersonRMinMatrixValidation, RejectsZeroInputMpi) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  PetersonRMinMatrixMPI task(0);
+  EXPECT_FALSE(task.Validation());
+  task.PreProcessing();
+  task.Run();
+  task.PostProcessing();
+}
+
+TEST(PetersonRMinMatrixValidation, AcceptsPositiveInputSeq) {
+  PetersonRMinMatrixSEQ task(10);
+
+  EXPECT_TRUE(task.Validation());
+  EXPECT_TRUE(task.PreProcessing());
+  EXPECT_TRUE(task.Run());
+  EXPECT_TRUE(task.PostProcessing());
+}
+
+TEST(PetersonRMinMatrixValidation, AcceptsPositiveInputMpi) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  PetersonRMinMatrixMPI task(10);
+
+  EXPECT_TRUE(task.Validation());
+  EXPECT_TRUE(task.PreProcessing());
+  EXPECT_TRUE(task.Run());
+  EXPECT_TRUE(task.PostProcessing());
+}
+
+template <typename TaskType>
+void RunTaskTwice(TaskType &task, InType n) {
+  task.GetInput() = n;
+  task.GetOutput().clear();
+  ASSERT_TRUE(task.Validation());
+  ASSERT_TRUE(task.PreProcessing());
+  ASSERT_TRUE(task.Run());
+  ASSERT_TRUE(task.PostProcessing());
+
+  std::vector<InType> expected_mins = CalculateExpectedColumnMins(n);
+  OutType output = task.GetOutput();
+
+  ASSERT_EQ(output.size(), static_cast<std::size_t>(n));
+
+  for (std::size_t j = 0; std::cmp_less(j, static_cast<std::size_t>(n)); j++) {
+    ASSERT_EQ(output[j], expected_mins[j]) << "Column " << j << " minimum mismatch in reuse test";
+  }
+}
+
+TEST(PetersonRMinMatrixPipeline, SeqTaskCanBeReusedAcrossRuns) {
+  PetersonRMinMatrixSEQ task(4);
+  RunTaskTwice(task, 4);
+  RunTaskTwice(task, 9);
+}
+
+TEST(PetersonRMinMatrixPipeline, MpiTaskCanBeReusedAcrossRuns) {
+  if (!ppc::util::IsUnderMpirun()) {
+    GTEST_SKIP();
+  }
+  PetersonRMinMatrixMPI task(6);
+  RunTaskTwice(task, 6);
+  RunTaskTwice(task, 14);
+}
+
+}  // namespace
+
+}  // namespace peterson_r_matrix_min_by_columns
