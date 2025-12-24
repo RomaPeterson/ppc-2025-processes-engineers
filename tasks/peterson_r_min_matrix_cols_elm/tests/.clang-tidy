@@ -1,6 +1,6 @@
 InheritParentConfig: true
 
-Checks: >
+Checks: |
   -modernize-loop-convert,
   -cppcoreguidelines-avoid-goto,
   -cppcoreguidelines-avoid-non-const-global-variables,
